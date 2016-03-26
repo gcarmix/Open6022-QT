@@ -16,7 +16,7 @@
 #define __HT6022_H
 
 /* Includes ------------------------------------------------------------------*/
-#include <libusb-1.0/libusb.h>
+#include <libusb.h>
 
 #ifdef __cplusplus
  extern "C" {
