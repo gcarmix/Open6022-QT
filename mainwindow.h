@@ -51,6 +51,10 @@ private slots:
 
     void on_actionSave_to_file_triggered();
 
+    void on_checkBoxCH1ON_toggled(bool checked);
+
+    void on_checkBoxCH2ON_toggled(bool checked);
+
 private:
     Ui::MainWindow *ui;
 };

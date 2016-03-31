@@ -8,6 +8,7 @@ HT6022_DeviceTypeDef Device;
 
 workerThread worker;
 typedef struct DSO_CHANNEL{
+    bool Enabled;
     double VScale;
     HT6022_IRTypeDef VRange;
     double VOffset;
@@ -49,7 +50,10 @@ MainWindow::MainWindow(QWidget *parent) :
                 ui->statusBar->showMessage("Loading Firmware...",0);
                 QApplication::processEvents();
             }
-
+                Channel1.Enabled = true;
+                ui->checkBoxCH1ON->setChecked(true);
+                Channel2.Enabled = true;
+                ui->checkBoxCH2ON->setChecked(true);
                 HT6022_SetSR (&Device, HT6022_100KSa);
                 HT6022_SetCH1IR (&Device, HT6022_10V);
                 HT6022_SetCH2IR (&Device, HT6022_10V);
@@ -259,15 +263,27 @@ for(i=0;i<HT6022_32KB;i++)
         worker.blockSignals(1);
         DSOStatus = 0;
         ui->btnGet->setText("ARM");
-        ui->customPlot->graph(0)->setData(x_vec,y1_vec);
-        ui->customPlot->graph(1)->setData(x_vec,y2_vec);
+        if(Channel1.Enabled)
+            ui->customPlot->graph(0)->setData(x_vec,y1_vec);
+        else
+            ui->customPlot->graph(0)->clearData();
+        if(Channel2.Enabled)
+            ui->customPlot->graph(1)->setData(x_vec,y2_vec);
+        else
+            ui->customPlot->graph(1)->clearData();
         ui->customPlot->replot();
     }
     else if(DSOMode < 2)
       {
-    ui->customPlot->graph(0)->setData(x_vec,y1_vec);
-    ui->customPlot->graph(1)->setData(x_vec,y2_vec);
-    ui->customPlot->replot();
+        if(Channel1.Enabled)
+            ui->customPlot->graph(0)->setData(x_vec,y1_vec);
+        else
+            ui->customPlot->graph(0)->clearData();
+        if(Channel2.Enabled)
+            ui->customPlot->graph(1)->setData(x_vec,y2_vec);
+        else
+            ui->customPlot->graph(1)->clearData();
+        ui->customPlot->replot();
     }
 }
 
@@ -499,6 +515,16 @@ void MainWindow::on_dialCursorV1_2_valueChanged(int value)
 void MainWindow::on_comboBoxCHSel_currentIndexChanged(int index)
 {
     ChTrigger = index + 1;
+    if(ChTrigger == 1)
+    {
+        Channel1.Enabled = true;
+        ui->checkBoxCH1ON->setChecked(true);
+    }
+    else
+    {
+        Channel2.Enabled = true;
+        ui->checkBoxCH2ON->setChecked(true);
+    }
 }
 
 void MainWindow::on_comboBox_4_currentIndexChanged(int index)
@@ -551,4 +577,17 @@ void MainWindow::on_actionSave_to_file_triggered()
                     Channel1.VScale * (worker.CH1[i]-128.0)/128.0,
                     Channel2.VScale * (worker.CH2[i]-128.0)/128.0);
         fclose(datafile);
+}
+
+
+
+void MainWindow::on_checkBoxCH1ON_toggled(bool checked)
+{
+    Channel1.Enabled = checked;
+}
+
+
+void MainWindow::on_checkBoxCH2ON_toggled(bool checked)
+{
+    Channel2.Enabled = checked;
 }

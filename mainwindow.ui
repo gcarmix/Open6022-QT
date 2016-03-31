@@ -628,7 +628,7 @@
       </property>
      </item>
     </widget>
-    <widget class="QCheckBox" name="checkBoxCH1ON_2">
+    <widget class="QCheckBox" name="checkBoxCH2ON">
      <property name="geometry">
       <rect>
        <x>10</x>
