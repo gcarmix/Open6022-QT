@@ -20,12 +20,14 @@ SOURCES += main.cpp\
     HT6022fw.c \
     HT6022.c \
     worker.cpp \
-    qcustomplot.cpp
+    qcustomplot.cpp \
+    DSOutils.c
 
 HEADERS  += mainwindow.h \
     HT6022fw.h \
     HT6022.h \
     worker.h \
-    qcustomplot.h
+    qcustomplot.h \
+    DSOutils.h
 
 FORMS    += mainwindow.ui

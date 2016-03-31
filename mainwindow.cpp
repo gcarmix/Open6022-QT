@@ -2,21 +2,33 @@
 #include "ui_mainwindow.h"
 #include "HT6022.h"
 #include "worker.h"
+
 #include <QDebug>
 HT6022_DeviceTypeDef Device;
 
 workerThread worker;
-double V1Scale,V2Scale,V1Offset,V2Offset;
+typedef struct DSO_CHANNEL{
+    double VScale;
+    HT6022_IRTypeDef VRange;
+    double VOffset;
+    double Vdiv;
+    uint8_t Zero;
+}DSO_CHANNEL;
+
+DSO_CHANNEL Channel1,Channel2;
+
 double CursorX1,CursorX2,CursorY1,CursorY2;
 double VTrigger;
-double V1div,V2div;
 double Ts,Tdiv;
 int DSOMode = 0, DSOStatus = 0;
 int ChTrigger = 1;
-HT6022_IRTypeDef CH1_VRange,CH2_VRange;
 HT6022_DataSizeTypeDef MemDepth = HT6022_32KB;
 QVector<double>x_vec(HT6022_32KB);
 QCPItemLine *vCursorX1,*vCursorX2,*vCursorTrigger;
+unsigned char i1;
+
+
+
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -37,6 +49,7 @@ MainWindow::MainWindow(QWidget *parent) :
                 ui->statusBar->showMessage("Loading Firmware...",0);
                 QApplication::processEvents();
             }
+
                 HT6022_SetSR (&Device, HT6022_100KSa);
                 HT6022_SetCH1IR (&Device, HT6022_10V);
                 HT6022_SetCH2IR (&Device, HT6022_10V);
@@ -94,10 +107,10 @@ void MainWindow::setupPlot(QCustomPlot *customPlot)
   customPlot->yAxis->setTickLabels(0);
   Ts = 1e-5;
   Tdiv = 1e-3;
-  V1div = 1;
-  V1Scale = 5;
-  V2div = 1;
-  V2Scale = 5;
+  Channel1.Vdiv = 1;
+  Channel1.VScale = 5;
+  Channel2.Vdiv = 1;
+  Channel2.VScale = 5;
   customPlot->xAxis->setRange(0, 10 * Tdiv);
   for(i=0;i<HT6022_32KB;i++)
       x_vec[i]=i*Ts;
@@ -170,8 +183,8 @@ for(i=0;i<HT6022_32KB;i++)
    {
     //y1[i] = (10.0 * ((double)CH1[i]/255.0 -128.0));
    // y2[i] = (10.0 * ((double)CH2[i]/255.0 -128.0));
-    y1_vec[i] = V1Scale * (worker.CH1[i]-128.0)/128.0;
-    y2_vec[i] = V2Scale * (worker.CH2[i]-128.0)/128.0;
+    y1_vec[i] = Channel1.VScale * (worker.CH1[i]-128.0)/128.0;
+    y2_vec[i] = Channel2.VScale * (worker.CH2[i]-128.0)/128.0;
 
 }
 
@@ -214,7 +227,9 @@ for(i=0;i<HT6022_32KB;i++)
             }
         }
     }
-    ui->lblfreq->setText(QString::number( fabs(1/((trigger2Idx - triggerIdx)*Ts)),'g',2));
+    char freqStr[10];
+    float2engStr(freqStr,fabs(1/((trigger2Idx - triggerIdx)*Ts)));
+    ui->lblfreq->setText(QString(freqStr) + "Hz");
     for(i=0;i<HT6022_32KB;i++)
     {
         x_vec[i] = (i-triggerIdx)*Ts;
@@ -233,8 +248,8 @@ for(i=0;i<HT6022_32KB;i++)
     //ui->customPlot->graph(1)->setData(x_vec,y2_vec);
     for(i=0;i<HT6022_32KB;i++)
     {
-        y1_vec[i] = y1_vec[i]/(4*V1div) + V1Offset;
-        y2_vec[i] = y2_vec[i]/(4*V2div) + V2Offset;
+        y1_vec[i] = y1_vec[i]/(4*Channel1.Vdiv) + Channel1.VOffset;
+        y2_vec[i] = y2_vec[i]/(4*Channel2.Vdiv) + Channel2.VOffset;
 
     }
 
@@ -261,32 +276,32 @@ void MainWindow::on_comboBoxV2div_currentIndexChanged(int index)
     switch(index)
     {
     case 0://2V
-        CH2_VRange = HT6022_10V;
-        V2div = 2.0;
-        V2Scale = 5.0;
+        Channel2.VRange = HT6022_10V;
+        Channel2.Vdiv = 2.0;
+        Channel2.VScale = 5.0;
         break;
     case 1://1V
-        CH2_VRange = HT6022_10V;
-        V2div = 1.0;
-        V2Scale = 5.0;
+        Channel2.VRange = HT6022_10V;
+        Channel2.Vdiv = 1.0;
+        Channel2.VScale = 5.0;
         break;
     case 2://0.5V
-        CH2_VRange = HT6022_5V;
-        V2div= 0.5;
-        V2Scale = 2.5;
+        Channel2.VRange = HT6022_5V;
+        Channel2.Vdiv= 0.5;
+        Channel2.VScale = 2.5;
         break;
     case 3://0.2V
-        CH2_VRange = HT6022_5V;
-        V2div = 0.2;
-        V2Scale = 2.5;
+        Channel2.VRange = HT6022_5V;
+        Channel2.Vdiv = 0.2;
+        Channel2.VScale = 2.5;
         break;
     case 4://0.1V
-        CH2_VRange = HT6022_2V;
-        V2div = 0.1;
-        V2Scale = 1.0;
+        Channel2.VRange = HT6022_2V;
+        Channel2.Vdiv = 0.1;
+        Channel2.VScale = 1.0;
         break;
     }
-    HT6022_SetCH2IR (&Device, CH2_VRange);
+    HT6022_SetCH2IR (&Device, Channel2.VRange);
 }
 
 void MainWindow::on_comboBoxV1div_currentIndexChanged(int index)
@@ -295,32 +310,32 @@ void MainWindow::on_comboBoxV1div_currentIndexChanged(int index)
     switch(index)
     {
     case 0://2V
-        CH1_VRange = HT6022_10V;
-        V1div = 2.0;
-        V1Scale = 5.0;
+        Channel1.VRange = HT6022_10V;
+        Channel1.Vdiv = 2.0;
+        Channel1.VScale = 5.0;
         break;
     case 1://1V
-        CH1_VRange = HT6022_10V;
-        V1div = 1.0;
-        V1Scale = 5.0;
+        Channel1.VRange = HT6022_10V;
+        Channel1.Vdiv = 1.0;
+        Channel1.VScale = 5.0;
         break;
     case 2://0.5V
-        CH1_VRange = HT6022_5V;
-        V1div= 0.5;
-        V1Scale = 2.5;
+        Channel1.VRange = HT6022_5V;
+        Channel1.Vdiv= 0.5;
+        Channel1.VScale = 2.5;
         break;
     case 3://0.2V
-        CH1_VRange = HT6022_5V;
-        V1div = 0.2;
-        V1Scale = 2.5;
+        Channel1.VRange = HT6022_5V;
+        Channel1.Vdiv = 0.2;
+        Channel1.VScale = 2.5;
         break;
     case 4://0.1V
-        CH1_VRange = HT6022_2V;
-        V1div = 0.1;
-        V1Scale = 1.0;
+        Channel1.VRange = HT6022_2V;
+        Channel1.Vdiv = 0.1;
+        Channel1.VScale = 1.0;
         break;
     }
-    HT6022_SetCH1IR (&Device, CH1_VRange);
+    HT6022_SetCH1IR (&Device, Channel1.VRange);
 }
 
 void MainWindow::on_comboSampling_currentIndexChanged(int index)
@@ -364,27 +379,32 @@ void MainWindow::on_comboSampling_currentIndexChanged(int index)
         Tdiv = 1e-4;
         Ts = 2e-6;
         break;
-    case 7://500us
+    case 7://200us
+        SR = HT6022_500KSa;
+        Tdiv = 2e-4;
+        Ts = 2e-6;
+        break;
+    case 8://500us
         SR = HT6022_500KSa;
         Tdiv = 5e-4;
         Ts = 2e-6;
         break;
-    case 8://1ms
+    case 9://1ms
         SR = HT6022_100KSa;
         Tdiv = 1e-3;
         Ts = 1e-5;
         break;
-    case 9://5ms
+    case 10://5ms
         SR = HT6022_100KSa;
         Tdiv = 5e-3;
         Ts = 1e-5;
         break;
-    case 10://10ms
+    case 11://10ms
         SR = HT6022_100KSa;
         Tdiv = 10e-3;
         Ts = 1e-5;
         break;
-    case 11://50ms
+    case 12://50ms
         SR = HT6022_100KSa;
         Tdiv = 50e-3;
         Ts = 1e-5;
@@ -406,58 +426,74 @@ void MainWindow::on_dialTrigger_valueChanged(int value)
 {
     if(ChTrigger == 1)
        {
-        VTrigger = V1Scale*((double)value/100.0);
+        VTrigger = Channel1.VScale*((double)value/100.0);
         ui->labelTrigger->setText(QString::number(VTrigger,'g',2));
-        vCursorTrigger->start->setCoords(-1,VTrigger/(4*V1div)+V1Offset);
-        vCursorTrigger->end->setCoords(1,VTrigger/(4*V1div)+V1Offset);
+        vCursorTrigger->start->setCoords(-1,VTrigger/(4*Channel1.Vdiv)+Channel1.VOffset);
+        vCursorTrigger->end->setCoords(1,VTrigger/(4*Channel1.Vdiv)+Channel1.VOffset);
     }
     else
     {
-        VTrigger = V2Scale*((double)value/100.0) ;
+        VTrigger = Channel2.VScale*((double)value/100.0) ;
         ui->labelTrigger->setText(QString::number(VTrigger,'g',2));
-        vCursorTrigger->start->setCoords(-1,VTrigger/(4*V2div)+V2Offset);
-        vCursorTrigger->end->setCoords(1,VTrigger/(4*V2div)+V2Offset);
+        vCursorTrigger->start->setCoords(-1,VTrigger/(4*Channel2.Vdiv)+Channel2.VOffset);
+        vCursorTrigger->end->setCoords(1,VTrigger/(4*Channel2.Vdiv)+Channel2.VOffset);
     }
     ui->customPlot->replot();
 }
 
+
+
 void MainWindow::on_dialCursorX1_valueChanged(int value)
 {
+    char valueStr[10];
     CursorX1 = (double)value*Tdiv/100;
-    vCursorX1->start->setCoords(CursorX1,-V1Scale);
-    vCursorX1->end->setCoords(CursorX1,V1Scale);
-    ui->labelCurX12->setText(QString::number(fabs(CursorX1-CursorX2),'g',2));
+    vCursorX1->start->setCoords(CursorX1,-Channel1.VScale);
+    vCursorX1->end->setCoords(CursorX1,Channel1.VScale);
+    float2engStr(valueStr,fabs(CursorX1-CursorX2));
+    ui->labelCurX12->setText(valueStr);
+    ui->customPlot->replot();
 
 }
 
+
+
+
+
 void MainWindow::on_dialCursorX2_valueChanged(int value)
 {
+    char valueStr[10];
     CursorX2 = ((double)value*Tdiv)/100;
-    vCursorX2->start->setCoords(CursorX2,-V1Scale);
-    vCursorX2->end->setCoords(CursorX2,V1Scale);
-    ui->labelCurX12->setText(QString::number(fabs(CursorX1-CursorX2),'g',2));
+    vCursorX2->start->setCoords(CursorX2,-Channel1.VScale);
+    vCursorX2->end->setCoords(CursorX2,Channel1.VScale);
+    float2engStr(valueStr,fabs(CursorX1-CursorX2));
+    ui->labelCurX12->setText(valueStr);
+    ui->customPlot->replot();
 }
 
 
 
 void MainWindow::on_dialCursorV1_valueChanged(int value)
 {
-    V1Offset = (double)value/100.0;
+    Channel1.VOffset = (double)value/100.0;
     if(ChTrigger == 1)
        {
-    vCursorTrigger->start->setCoords(-1,VTrigger/(4*V1div)+V1Offset);
-    vCursorTrigger->end->setCoords(1,VTrigger/(4*V1div)+V1Offset);
+    vCursorTrigger->start->setCoords(-1,VTrigger/(4*Channel1.Vdiv)+Channel1.VOffset);
+    vCursorTrigger->end->setCoords(1,VTrigger/(4*Channel1.Vdiv)+Channel1.VOffset);
+
     }
+    ui->customPlot->replot();
 }
 
 void MainWindow::on_dialCursorV1_2_valueChanged(int value)
 {
-    V2Offset = (double)value/100.0;
+    Channel2.VOffset = (double)value/100.0;
     if(ChTrigger == 2)
       {
-    vCursorTrigger->start->setCoords(-1,VTrigger/(4*V2div)+V2Offset);
-    vCursorTrigger->end->setCoords(1,VTrigger/(4*V2div)+V2Offset);
+    vCursorTrigger->start->setCoords(-1,VTrigger/(4*Channel2.Vdiv)+Channel2.VOffset);
+    vCursorTrigger->end->setCoords(1,VTrigger/(4*Channel2.Vdiv)+Channel2.VOffset);
+
     }
+    ui->customPlot->replot();
 }
 
 void MainWindow::on_comboBoxCHSel_currentIndexChanged(int index)
@@ -512,7 +548,7 @@ void MainWindow::on_actionSave_to_file_triggered()
         for(i=0;i<MemDepth;i++)
             fprintf(datafile,"%3.2f,%3.2f,%3.2f\r\n",
                     double(i)*Ts,
-                    V1Scale * (worker.CH1[i]-128.0)/128.0,
-                    V2Scale * (worker.CH2[i]-128.0)/128.0);
+                    Channel1.VScale * (worker.CH1[i]-128.0)/128.0,
+                    Channel2.VScale * (worker.CH2[i]-128.0)/128.0);
         fclose(datafile);
 }
