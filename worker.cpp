@@ -11,7 +11,7 @@ void workerThread::run()
     {
 
     HT6022_ReadData(&Device, CH1, CH2, MemDepth, 0);
-    msleep(10);
+    msleep(40);
    /* FILE * datafile;
     datafile = fopen("/Users/carmix/Sviluppo/data.txt","wt");
     for(i=0;i<HT6022_1KB;i++)

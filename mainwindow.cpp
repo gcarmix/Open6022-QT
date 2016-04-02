@@ -2,8 +2,11 @@
 #include "ui_mainwindow.h"
 #include "HT6022.h"
 #include "worker.h"
-
+#include "dso.h"
 #include <QDebug>
+
+
+
 HT6022_DeviceTypeDef Device;
 
 workerThread worker;
@@ -22,10 +25,11 @@ double CursorX1,CursorX2,CursorY1,CursorY2;
 double VTrigger;
 double Ts,Tdiv;
 int DSOMode = 0, DSOStatus = 0;
-int ChTrigger = 1;
+int ChTrigger = 1, RiseTrigger = 1;
 HT6022_DataSizeTypeDef MemDepth = HT6022_32KB;
 QVector<double>x_vec(HT6022_32KB);
 QCPItemLine *vCursorX1,*vCursorX2,*vCursorTrigger;
+QCPItemText *MemDepthText;
 unsigned char i1;
 
 
@@ -54,10 +58,20 @@ MainWindow::MainWindow(QWidget *parent) :
                 ui->checkBoxCH1ON->setChecked(true);
                 Channel2.Enabled = true;
                 ui->checkBoxCH2ON->setChecked(true);
+                ui->comboMemDepth->setCurrentIndex(3);
                 HT6022_SetSR (&Device, HT6022_100KSa);
                 HT6022_SetCH1IR (&Device, HT6022_10V);
                 HT6022_SetCH2IR (&Device, HT6022_10V);
                 VTrigger = 0.5;
+                Ts = 2e-6;
+                Tdiv = 1e-3;
+                Channel1.Vdiv = 1;
+                Channel1.VScale = 5;
+                Channel2.Vdiv = 1;
+                Channel2.VScale = 5;
+                ui->comboBoxV1div->setCurrentIndex(1);
+                ui->comboBoxV2div->setCurrentIndex(1);
+                ui->comboSampling->setCurrentIndex(TDIV_1MS);
                 ui->statusBar->showMessage("Device initialized.",0);
                 qDebug() << "Init values set\r\n";
                 worker.start();
@@ -93,6 +107,7 @@ void MainWindow::setupPlot(QCustomPlot *customPlot)
   //customPlot->xAxis->setRange(0, 16);
   // add the text label at the top:
   QCPItemText *channelText = new QCPItemText(customPlot);
+MemDepthText = new QCPItemText(customPlot);
   vCursorX1 = new QCPItemLine(customPlot);
   vCursorX1->setPen(QColor(Qt::white));
   vCursorX2 = new QCPItemLine(customPlot);
@@ -101,7 +116,13 @@ void MainWindow::setupPlot(QCustomPlot *customPlot)
   vCursorTrigger->setPen(QColor(Qt::darkYellow));
   customPlot->addItem(channelText);
 
-  //channelText->position->setParentAnchor(bracket->center);
+
+  MemDepthText->position->setCoords(0,-0.95);
+  MemDepthText->setPositionAlignment(Qt::AlignTop|Qt::AlignLeft);
+  MemDepthText->setText("32Kpts");
+  MemDepthText->setFont(QFont(font().family(), 10));
+  MemDepthText->setColor(QColor(Qt::yellow));
+
   channelText->position->setCoords(0, 1); // move 10 pixels to the top from bracket center anchor
   channelText->setPositionAlignment(Qt::AlignTop|Qt::AlignLeft);
   channelText->setText("CH1");
@@ -109,12 +130,7 @@ void MainWindow::setupPlot(QCustomPlot *customPlot)
   channelText->setColor(QColor(Qt::yellow));
   customPlot->xAxis->setTickLabels(0);
   customPlot->yAxis->setTickLabels(0);
-  Ts = 1e-5;
-  Tdiv = 1e-3;
-  Channel1.Vdiv = 1;
-  Channel1.VScale = 5;
-  Channel2.Vdiv = 1;
-  Channel2.VScale = 5;
+
   customPlot->xAxis->setRange(0, 10 * Tdiv);
   for(i=0;i<HT6022_32KB;i++)
       x_vec[i]=i*Ts;
@@ -183,6 +199,7 @@ void MainWindow::updatePlot(){
 QVector<double>y1_vec(HT6022_32KB);
 QVector<double>y2_vec(HT6022_32KB);
 double CH1max=-1e6,CH1min=1e6,CH1Vpp;
+double CH2max=-1e6,CH2min=1e6,CH2Vpp;
 for(i=0;i<HT6022_32KB;i++)
    {
     //y1[i] = (10.0 * ((double)CH1[i]/255.0 -128.0));
@@ -194,40 +211,80 @@ for(i=0;i<HT6022_32KB;i++)
 
     triggerIdx = 0;
     trigger2Idx = 0;
-    for(i=2000;i>4;i--)
+    for(i=1000;i>4;i--)
     {
-        if(ChTrigger == 1)
-           {
-                if(y1_vec[i]< VTrigger && y1_vec[i+1]>=VTrigger)
+        if(RiseTrigger == 0)
+        {
+            if(ChTrigger == 1)
+               {
+                    if(y1_vec[i]< VTrigger && y1_vec[i+1]>=VTrigger && y1_vec[i+2] >= y1_vec[i+1])
+                    {
+                        if(triggerIdx == 0)
+                        {
+                            triggerIdx = i;
+
+                        }
+                        else
+                        {
+                            trigger2Idx = i;
+
+                            break;
+                        }
+
+                    }
+            }
+            else
+            {
+                if(y2_vec[i]< VTrigger && y2_vec[i+1]>=VTrigger && y2_vec[i+2] >= y2_vec[i+1])
                 {
                     if(triggerIdx == 0)
                     {
                         triggerIdx = i;
-
                     }
                     else
                     {
                         trigger2Idx = i;
-
                         break;
                     }
 
                 }
+            }
         }
         else
         {
-            if(y2_vec[i]< VTrigger && y2_vec[i+1]>=VTrigger)
-            {
-                if(triggerIdx == 0)
-                {
-                    triggerIdx = i;
-                }
-                else
-                {
-                    trigger2Idx = i;
-                    break;
-                }
+            if(ChTrigger == 1)
+               {
+                    if(y1_vec[i]> VTrigger && y1_vec[i+1]<=VTrigger && y1_vec[i+2] <= y1_vec[i+1])
+                    {
+                        if(triggerIdx == 0)
+                        {
+                            triggerIdx = i;
 
+                        }
+                        else
+                        {
+                            trigger2Idx = i;
+
+                            break;
+                        }
+
+                    }
+            }
+            else
+            {
+                if(y2_vec[i]> VTrigger && y2_vec[i+1]<=VTrigger && y2_vec[i+2] <= y2_vec[i+1])
+                {
+                    if(triggerIdx == 0)
+                    {
+                        triggerIdx = i;
+                    }
+                    else
+                    {
+                        trigger2Idx = i;
+                        break;
+                    }
+
+                }
             }
         }
     }
@@ -241,11 +298,20 @@ for(i=0;i<HT6022_32KB;i++)
             CH1max =  y1_vec[i];
         if(y1_vec[i]<CH1min)
             CH1min =  y1_vec[i];
+        if(y2_vec[i]>CH2max)
+            CH2max =  y2_vec[i];
+        if(y2_vec[i]<CH2min)
+            CH2min =  y2_vec[i];
     }
     CH1Vpp = fabs(CH1max - CH1min);
-    ui->lblMaxVal->setText( QString::number(CH1max,'g',2));
-    ui->lblminVal->setText( QString::number(CH1min,'g',2));
-    ui->lblVppVal->setText( QString::number(CH1Vpp,'g',2));
+    CH2Vpp = fabs(CH2max - CH2min);
+    ui->lblMaxVal->setText( QString::number(CH1max,'g',2) + "V");
+    ui->lblminVal->setText( QString::number(CH1min,'g',2) + "V");
+    ui->lblVppVal->setText( QString::number(CH1Vpp,'g',2) + "V");
+
+    ui->lblMaxVal_2->setText( QString::number(CH2max,'g',2) + "V");
+    ui->lblminVal_2->setText( QString::number(CH2min,'g',2) + "V");
+    ui->lblVppVal_2->setText( QString::number(CH2Vpp,'g',2) + "V");
 
    // while(!(y1_vec[0]<2 && y1_vec[1]>=2))
     //    y1_vec.removeFirst();
@@ -263,26 +329,26 @@ for(i=0;i<HT6022_32KB;i++)
         worker.blockSignals(1);
         DSOStatus = 0;
         ui->btnGet->setText("ARM");
+        ui->customPlot->graph(0)->clearData();
+        ui->customPlot->graph(1)->clearData();
         if(Channel1.Enabled)
             ui->customPlot->graph(0)->setData(x_vec,y1_vec);
-        else
-            ui->customPlot->graph(0)->clearData();
+
         if(Channel2.Enabled)
             ui->customPlot->graph(1)->setData(x_vec,y2_vec);
-        else
-            ui->customPlot->graph(1)->clearData();
+
         ui->customPlot->replot();
     }
     else if(DSOMode < 2)
       {
+        ui->customPlot->graph(0)->clearData();
+        ui->customPlot->graph(1)->clearData();
         if(Channel1.Enabled)
             ui->customPlot->graph(0)->setData(x_vec,y1_vec);
-        else
-            ui->customPlot->graph(0)->clearData();
+
         if(Channel2.Enabled)
             ui->customPlot->graph(1)->setData(x_vec,y2_vec);
-        else
-            ui->customPlot->graph(1)->clearData();
+
         ui->customPlot->replot();
     }
 }
@@ -360,69 +426,99 @@ void MainWindow::on_comboSampling_currentIndexChanged(int index)
     int i;
     switch(index)
     {
-    case 0://100ns
-        SR = HT6022_4MSa;
+    case TDIV_100NS://100ns
+        SR = HT6022_48MSa;
         Tdiv = 100e-9;
-        Ts = 250e-9;
+        Ts = 1/48e6;
         break;
-    case 1://500ns
-        SR = HT6022_4MSa;
+    case TDIV_200NS://200ns
+        SR = HT6022_48MSa;
+        Tdiv = 200e-9;
+        Ts = 1/48e6;
+        break;
+    case TDIV_500NS://500ns
+        SR = HT6022_16MSa;
         Tdiv = 500e-9;
-        Ts = 250e-9;
+        Ts = 1/16e6;
         break;
-    case 2://1us
-        SR = HT6022_4MSa;
+    case TDIV_1US://1us
+        SR = HT6022_8MSa;
         Tdiv = 1e-6;
-        Ts = 250e-9;
+        Ts = 1/8e6;
         break;
-    case 3://5us
-        SR = HT6022_4MSa;
+    case TDIV_2US://2us
+        SR = HT6022_8MSa;
+        Tdiv = 2e-6;
+        Ts = 1/8e6;
+        break;
+    case TDIV_5US://5us
+        SR = HT6022_8MSa;
         Tdiv = 5e-6;
-        Ts = 250e-9;
+        Ts = 1/8e6;
         break;
-    case 4://10us
+    case TDIV_10US://10us
         SR = HT6022_4MSa;
         Tdiv = 1e-5;
-        Ts = 250e-9;
+        Ts = 1/4e6;
         break;
-    case 5://50us
-        SR = HT6022_1MSa;
+    case TDIV_20US://20us
+        SR = HT6022_4MSa;
+        Tdiv = 2e-5;
+        Ts = 1/4e6;
+        break;
+    case TDIV_50US://50us
+        SR = HT6022_4MSa;
         Tdiv = 5e-5;
+        Ts = 1/4e6;
+        break;
+    case TDIV_100US://100us
+        SR = HT6022_1MSa;
+        Tdiv = 1e-4;
         Ts = 1e-6;
         break;
-    case 6://100us
-        SR = HT6022_500KSa;
-        Tdiv = 1e-4;
-        Ts = 2e-6;
-        break;
-    case 7://200us
-        SR = HT6022_500KSa;
+    case TDIV_200US://200us
+        SR = HT6022_1MSa;
         Tdiv = 2e-4;
-        Ts = 2e-6;
+        Ts = 1e-6;
         break;
-    case 8://500us
-        SR = HT6022_500KSa;
+    case TDIV_500US://500us
+        SR = HT6022_1MSa;
         Tdiv = 5e-4;
+        Ts = 1e-6;
+        break;
+    case TDIV_1MS://1ms
+        SR = HT6022_500KSa;
+        Tdiv = 1e-3;
         Ts = 2e-6;
         break;
-    case 9://1ms
-        SR = HT6022_100KSa;
-        Tdiv = 1e-3;
-        Ts = 1e-5;
+    case TDIV_2MS://2ms
+        SR = HT6022_500KSa;
+        Tdiv = 2e-3;
+        Ts = 2e-6;
         break;
-    case 10://5ms
-        SR = HT6022_100KSa;
+    case TDIV_5MS://5ms
+        SR = HT6022_500KSa;
         Tdiv = 5e-3;
-        Ts = 1e-5;
+        Ts = 2e-6;
         break;
-    case 11://10ms
+    case TDIV_10MS://10ms
         SR = HT6022_100KSa;
         Tdiv = 10e-3;
         Ts = 1e-5;
         break;
-    case 12://50ms
+    case TDIV_20MS://20ms
+        SR = HT6022_100KSa;
+        Tdiv = 20e-3;
+        Ts = 1e-5;
+        break;
+    case TDIV_50MS://50ms
         SR = HT6022_100KSa;
         Tdiv = 50e-3;
+        Ts = 1e-5;
+        break;
+    case TDIV_100MS://100ms
+        SR = HT6022_100KSa;
+        Tdiv = 100e-3;
         Ts = 1e-5;
         break;
 
@@ -549,15 +645,27 @@ void MainWindow::on_comboMemDepth_currentIndexChanged(int index)
        {
         case 0:
         MemDepth = HT6022_1MB;
+        MemDepthText->setText("1Mpts");
         break;
     case 1:
         MemDepth = HT6022_512KB;
+       MemDepthText->setText("512Kpts");
         break;
     case 2:
         MemDepth = HT6022_128KB;
+        MemDepthText->setText("128Kpts");
         break;
     case 3:
         MemDepth = HT6022_32KB;
+        //MemDepthText->setText("32Kpts");
+        break;
+    case 4:
+        MemDepth = HT6022_16KB;
+        //MemDepthText->setText("32Kpts");
+        break;
+    case 5:
+        MemDepth = HT6022_8KB;
+        //MemDepthText->setText("32Kpts");
         break;
     default:
         break;
@@ -590,4 +698,10 @@ void MainWindow::on_checkBoxCH1ON_toggled(bool checked)
 void MainWindow::on_checkBoxCH2ON_toggled(bool checked)
 {
     Channel2.Enabled = checked;
+}
+
+
+void MainWindow::on_comboBox_rise_currentIndexChanged(int index)
+{
+    RiseTrigger = index; //0 Rise 1 Fall
 }

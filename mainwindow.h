@@ -55,6 +55,8 @@ private slots:
 
     void on_checkBoxCH2ON_toggled(bool checked);
 
+    void on_comboBox_rise_currentIndexChanged(int index);
+
 private:
     Ui::MainWindow *ui;
 };

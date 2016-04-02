@@ -28,6 +28,7 @@ HEADERS  += mainwindow.h \
     HT6022.h \
     worker.h \
     qcustomplot.h \
-    DSOutils.h
+    DSOutils.h \
+    dso.h
 
 FORMS    += mainwindow.ui
