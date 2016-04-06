@@ -57,6 +57,8 @@ private slots:
 
     void on_comboBox_rise_currentIndexChanged(int index);
 
+    void on_actionCalibrate_triggered();
+
 private:
     Ui::MainWindow *ui;
 };

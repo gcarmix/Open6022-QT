@@ -16,7 +16,7 @@ typedef struct DSO_CHANNEL{
     HT6022_IRTypeDef VRange;
     double VOffset;
     double Vdiv;
-    uint8_t Zero;
+    int16_t Zero;
 }DSO_CHANNEL;
 
 DSO_CHANNEL Channel1,Channel2;
@@ -29,7 +29,6 @@ int ChTrigger = 1, RiseTrigger = 1;
 HT6022_DataSizeTypeDef MemDepth = HT6022_32KB;
 QVector<double>x_vec(HT6022_32KB);
 QCPItemLine *vCursorX1,*vCursorX2,*vCursorTrigger;
-QCPItemText *MemDepthText;
 unsigned char i1;
 
 
@@ -43,6 +42,8 @@ MainWindow::MainWindow(QWidget *parent) :
     int res;
     if(!HT6022_Init())
     {
+        QPalette* palette = new QPalette();
+            palette->setColor(QPalette::WindowText,Qt::yellow);
         res= HT6022_FirmwareUpload();
         if (res == HT6022_SUCCESS || res == HT6022_LOADED)
         {
@@ -59,6 +60,7 @@ MainWindow::MainWindow(QWidget *parent) :
                 Channel2.Enabled = true;
                 ui->checkBoxCH2ON->setChecked(true);
                 ui->comboMemDepth->setCurrentIndex(3);
+                ui->MemDepthText->setPalette(*palette);
                 HT6022_SetSR (&Device, HT6022_100KSa);
                 HT6022_SetCH1IR (&Device, HT6022_10V);
                 HT6022_SetCH2IR (&Device, HT6022_10V);
@@ -69,6 +71,8 @@ MainWindow::MainWindow(QWidget *parent) :
                 Channel1.VScale = 5;
                 Channel2.Vdiv = 1;
                 Channel2.VScale = 5;
+                Channel1.Zero = 0;
+                Channel1.Zero = 0;
                 ui->comboBoxV1div->setCurrentIndex(1);
                 ui->comboBoxV2div->setCurrentIndex(1);
                 ui->comboSampling->setCurrentIndex(TDIV_1MS);
@@ -95,6 +99,7 @@ MainWindow::MainWindow(QWidget *parent) :
 void MainWindow::setupPlot(QCustomPlot *customPlot)
 {
     int i;
+  customPlot->setBackground(Qt::black);
   // create graph and assign data to it:
   customPlot->addGraph();
   //customPlot->graph(0)->setData(x, y);
@@ -106,28 +111,14 @@ void MainWindow::setupPlot(QCustomPlot *customPlot)
   // set axes ranges, so we see all data:
   //customPlot->xAxis->setRange(0, 16);
   // add the text label at the top:
-  QCPItemText *channelText = new QCPItemText(customPlot);
-MemDepthText = new QCPItemText(customPlot);
   vCursorX1 = new QCPItemLine(customPlot);
   vCursorX1->setPen(QColor(Qt::white));
   vCursorX2 = new QCPItemLine(customPlot);
   vCursorX2->setPen(QColor(Qt::white));
   vCursorTrigger = new QCPItemLine(customPlot);
   vCursorTrigger->setPen(QColor(Qt::darkYellow));
-  customPlot->addItem(channelText);
 
 
-  MemDepthText->position->setCoords(0,-0.95);
-  MemDepthText->setPositionAlignment(Qt::AlignTop|Qt::AlignLeft);
-  MemDepthText->setText("32Kpts");
-  MemDepthText->setFont(QFont(font().family(), 10));
-  MemDepthText->setColor(QColor(Qt::yellow));
-
-  channelText->position->setCoords(0, 1); // move 10 pixels to the top from bracket center anchor
-  channelText->setPositionAlignment(Qt::AlignTop|Qt::AlignLeft);
-  channelText->setText("CH1");
-  channelText->setFont(QFont(font().family(), 10));
-  channelText->setColor(QColor(Qt::yellow));
   customPlot->xAxis->setTickLabels(0);
   customPlot->yAxis->setTickLabels(0);
 
@@ -204,8 +195,8 @@ for(i=0;i<HT6022_32KB;i++)
    {
     //y1[i] = (10.0 * ((double)CH1[i]/255.0 -128.0));
    // y2[i] = (10.0 * ((double)CH2[i]/255.0 -128.0));
-    y1_vec[i] = Channel1.VScale * (worker.CH1[i]-128.0)/128.0;
-    y2_vec[i] = Channel2.VScale * (worker.CH2[i]-128.0)/128.0;
+    y1_vec[i] = Channel1.VScale * (worker.CH1[i]-128.0 - Channel1.Zero)/128.0;
+    y2_vec[i] = Channel2.VScale * (worker.CH2[i]-128.0 - Channel2.Zero)/128.0;
 
 }
 
@@ -615,11 +606,15 @@ void MainWindow::on_comboBoxCHSel_currentIndexChanged(int index)
     {
         Channel1.Enabled = true;
         ui->checkBoxCH1ON->setChecked(true);
+        vCursorTrigger->start->setCoords(-1,VTrigger/(4*Channel1.Vdiv)+Channel1.VOffset);
+        vCursorTrigger->end->setCoords(1,VTrigger/(4*Channel1.Vdiv)+Channel1.VOffset);
     }
     else
     {
         Channel2.Enabled = true;
         ui->checkBoxCH2ON->setChecked(true);
+        vCursorTrigger->start->setCoords(-1,VTrigger/(4*Channel2.Vdiv)+Channel2.VOffset);
+        vCursorTrigger->end->setCoords(1,VTrigger/(4*Channel2.Vdiv)+Channel2.VOffset);
     }
 }
 
@@ -645,27 +640,27 @@ void MainWindow::on_comboMemDepth_currentIndexChanged(int index)
        {
         case 0:
         MemDepth = HT6022_1MB;
-        MemDepthText->setText("1Mpts");
+        ui->MemDepthText->setText("1Mpts");
         break;
     case 1:
         MemDepth = HT6022_512KB;
-       MemDepthText->setText("512Kpts");
+       ui->MemDepthText->setText("512Kpts");
         break;
     case 2:
         MemDepth = HT6022_128KB;
-        MemDepthText->setText("128Kpts");
+        ui->MemDepthText->setText("128Kpts");
         break;
     case 3:
         MemDepth = HT6022_32KB;
-        //MemDepthText->setText("32Kpts");
+        ui->MemDepthText->setText("32Kpts");
         break;
     case 4:
         MemDepth = HT6022_16KB;
-        //MemDepthText->setText("32Kpts");
+        ui->MemDepthText->setText("16Kpts");
         break;
     case 5:
         MemDepth = HT6022_8KB;
-        //MemDepthText->setText("32Kpts");
+        ui->MemDepthText->setText("8Kpts");
         break;
     default:
         break;
@@ -704,4 +699,14 @@ void MainWindow::on_checkBoxCH2ON_toggled(bool checked)
 void MainWindow::on_comboBox_rise_currentIndexChanged(int index)
 {
     RiseTrigger = index; //0 Rise 1 Fall
+}
+
+void MainWindow::on_actionCalibrate_triggered()
+{
+    QMessageBox msgBox;
+    msgBox.setText("Connect both probes to Ground to calibrate...");
+    msgBox.exec();
+    Channel1.Zero=(int16_t)worker.CH1[1]-128;
+    Channel2.Zero=(int16_t)worker.CH2[1]-128;
+
 }
